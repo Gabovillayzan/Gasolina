@@ -1,129 +1,204 @@
-"""Estilos y tarjetas de resultado. Mantiene el HTML fuera de app.py."""
+"""Capa visual: tema Ruta, iconos y tarjetas. Mantiene el HTML fuera de app.py.
+
+El tema vive en variables CSS y cambia solo con `prefers-color-scheme`, asi que
+seguir al dispositivo no cuesta ningun rerun. `[theme]` y `[theme.dark]` del
+config.toml pintan los widgets nativos con los mismos valores.
+
+El acento ambar es de senalizacion vial y se usa solo para accion, seleccion y
+estado. El lenguaje es algo brutalista: aristas de 3 px, bordes de 2 px, sombra
+solida sin difuminar y numeracion en bloque.
+"""
 from __future__ import annotations
 
 import html
 
 import pandas as pd
 
-from utils.constants import BRAND_LABELS, COLORS
+from utils.constants import BRAND_LABELS, FONT_CSS_URL, THEME
 from utils.links import google_maps_url, waze_url
 
-CARD_CSS = f"""
+
+def _vars(mode: str) -> str:
+    t = THEME[mode]
+    return "".join(f"--{k.replace('_','-')}:{v};" for k, v in t.items())
+
+
+CSS = f"""
 <style>
-  /* Ocultar cromo de Streamlit para que se vea como app propia */
+  @import url('{FONT_CSS_URL}');
+
+  :root {{ {_vars("light")} }}
+  @media (prefers-color-scheme: dark) {{ :root {{ {_vars("dark")} }} }}
+
+  :root {{
+    --radius: 3px;
+    --border: 2px solid var(--line);
+    --hard: 3px 3px 0 var(--line);
+  }}
+
+  /* Quitar cromo de Streamlit */
   #MainMenu, footer, header {{ visibility: hidden; }}
   .stDeployButton {{ display: none; }}
+  .stAppHeader {{ display: none; }}
 
-  .stApp {{ background: {COLORS['bg']}; }}
-  .block-container {{
-      padding: 1.1rem 1rem 3rem;
-      max-width: 640px;
+  .stApp {{ background: var(--canvas); }}
+  .block-container {{ padding: .8rem .85rem 3rem; max-width: 660px; }}
+  html, body, [class*="css"] {{
+    color: var(--ink);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   }}
-  html, body, [class*="css"] {{ color: {COLORS['text']}; }}
 
+  /* ---------- Cabecera ---------- */
+  .ga-head {{ display:flex; align-items:center; gap:.55rem; margin-bottom:.15rem; }}
+  .ga-head svg {{ width:26px; height:26px; flex:none; }}
   .ga-head h1 {{
-      font-size: 1.6rem; font-weight: 700; margin: 0 0 .15rem;
-      letter-spacing: -.02em;
+    font-size:1.5rem; font-weight:800; letter-spacing:-.035em; margin:0; line-height:1;
   }}
-  .ga-head p {{ margin: 0 0 .9rem; color: {COLORS['muted']}; font-size: .92rem; }}
+  .ga-sub {{
+    color:var(--ink-2); font-size:.85rem; margin:.15rem 0 .85rem;
+  }}
 
+  /* ---------- Ubicacion ---------- */
   .ga-loc {{
-      display: flex; align-items: center; gap: .45rem;
-      font-size: .9rem; padding: .5rem .7rem; margin-bottom: .6rem;
-      border-radius: 10px; border: 1px solid {COLORS['border']};
-      background: {COLORS['card']};
+    display:flex; align-items:center; gap:.45rem;
+    font-size:.85rem; padding:.5rem .65rem; margin-bottom:.55rem;
+    border-radius:var(--radius); border:var(--border); background:var(--surface);
   }}
-  .ga-loc-ok span {{ color: {COLORS['text']}; font-weight: 600; }}
-  .ga-loc-default span {{ color: {COLORS['muted']}; }}
+  .ga-loc svg {{ width:15px; height:15px; flex:none; color:var(--accent); }}
+  .ga-loc span {{ font-weight:600; }}
+  .ga-loc-default span {{ font-weight:500; color:var(--ink-2); }}
 
+  /* ---------- Titulos de bloque ---------- */
   .ga-h3 {{
-      font-size: 1rem; font-weight: 700; margin: 1.3rem 0 .55rem;
-      letter-spacing: -.01em;
+    font-size:.72rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--ink-2); margin:1.25rem 0 .5rem;
+    border-bottom:var(--border); padding-bottom:.32rem;
   }}
 
-  .ga-savings {{
-      background: rgba(16,185,129,.09);
-      border: 1px solid rgba(16,185,129,.28);
-      color: #065F46;
-      border-radius: 12px; padding: .7rem .85rem;
-      font-size: .9rem; margin: .9rem 0 .2rem;
+  /* ---------- Mejor opcion ---------- */
+  .ga-hero {{
+    background:var(--surface); border:2px solid var(--accent);
+    border-radius:var(--radius); padding:.9rem .95rem; margin-bottom:.7rem;
+    box-shadow:3px 3px 0 var(--accent);
+  }}
+  .ga-hero-tag {{
+    display:inline-block; font-size:.63rem; font-weight:800; letter-spacing:.13em;
+    text-transform:uppercase; background:var(--accent); color:var(--on-accent);
+    padding:.2rem .45rem; border-radius:2px; margin-bottom:.5rem;
+  }}
+  .ga-hero-name {{ font-size:1.08rem; font-weight:800; letter-spacing:-.02em; margin:0 0 .15rem; }}
+  .ga-hero-price {{
+    font-size:2.15rem; font-weight:800; letter-spacing:-.045em; line-height:1;
+    font-variant-numeric:tabular-nums; margin:.45rem 0 .1rem;
+  }}
+  .ga-hero-unit {{
+    font-size:.63rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--ink-2);
+  }}
+  .ga-save {{
+    background:var(--ok-bg); border-left:3px solid var(--ok); color:var(--ok);
+    padding:.5rem .6rem; margin-top:.6rem; font-size:.82rem; font-weight:600;
+    border-radius:0 var(--radius) var(--radius) 0;
   }}
 
+  /* ---------- Tarjetas ---------- */
   .ga-card {{
-      background: {COLORS['card']};
-      border: 1px solid {COLORS['border']};
-      border-radius: 14px;
-      padding: .85rem .9rem;
-      margin-bottom: .6rem;
-      box-shadow: 0 1px 3px rgba(17,17,17,.05);
+    background:var(--surface); border:var(--border); border-radius:var(--radius);
+    padding:.7rem .75rem; margin-bottom:.5rem;
   }}
-  .ga-card-top {{
-      display: flex; justify-content: space-between;
-      align-items: flex-start; gap: .8rem;
+  .ga-card-top {{ display:flex; gap:.6rem; align-items:flex-start; }}
+  .ga-rank {{
+    flex:none; width:23px; height:23px; border-radius:2px;
+    display:grid; place-items:center; margin-top:1px;
+    background:var(--accent); color:var(--on-accent);
+    font-size:.78rem; font-weight:800; font-variant-numeric:tabular-nums;
   }}
-  .ga-name {{
-      font-weight: 700; font-size: .97rem; line-height: 1.25;
-      margin: 0 0 .18rem;
-  }}
-  .ga-addr {{
-      color: {COLORS['muted']}; font-size: .81rem; line-height: 1.35;
-      margin: 0 0 .3rem;
-  }}
-  .ga-price {{
-      text-align: right; white-space: nowrap;
-      font-size: 1.32rem; font-weight: 800; letter-spacing: -.03em;
-      color: {COLORS['text']}; line-height: 1.1;
-  }}
-  .ga-price small {{
-      display: block; font-size: .66rem; font-weight: 600;
-      color: {COLORS['muted']}; letter-spacing: .02em;
-  }}
-  .ga-meta {{
-      display: flex; align-items: center; gap: .4rem;
-      flex-wrap: wrap; margin-top: .15rem;
-  }}
-  .ga-dist {{
-      font-size: .8rem; font-weight: 600; color: {COLORS['text']};
-      background: #F3F4F6; border-radius: 999px; padding: .12rem .5rem;
+  .ga-body {{ min-width:0; flex:1; }}
+  .ga-name {{ font-weight:700; font-size:.93rem; line-height:1.25; margin:0 0 .12rem; }}
+  .ga-addr {{ color:var(--ink-2); font-size:.77rem; line-height:1.3; margin:0; }}
+  .ga-meta {{ display:flex; align-items:center; gap:.32rem; flex-wrap:wrap; margin-top:.35rem; }}
+  .ga-chip {{
+    font-size:.72rem; font-weight:700; border-radius:2px; padding:.1rem .35rem;
+    background:var(--chip); color:var(--chip-ink); font-variant-numeric:tabular-nums;
   }}
   .ga-badge {{
-      font-size: .72rem; font-weight: 700; letter-spacing: .01em;
-      color: #065F46; background: rgba(16,185,129,.13);
-      border: 1px solid rgba(16,185,129,.3);
-      border-radius: 999px; padding: .12rem .5rem;
+    font-size:.68rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+    border-radius:2px; padding:.1rem .35rem; background:var(--ok-bg); color:var(--ok);
   }}
-  .ga-approx {{ font-size: .72rem; color: {COLORS['muted']}; }}
+  .ga-approx {{ font-size:.7rem; color:var(--ink-2); }}
+  .ga-price {{ text-align:right; white-space:nowrap; margin-left:auto; }}
+  .ga-price b {{
+    display:block; font-size:1.28rem; font-weight:800; letter-spacing:-.035em;
+    line-height:1.05; font-variant-numeric:tabular-nums;
+  }}
+  .ga-price span {{
+    display:block; font-size:.6rem; font-weight:800; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-2); margin-top:.15rem;
+  }}
 
-  .ga-actions {{ display: flex; gap: .45rem; margin-top: .6rem; }}
+  /* ---------- Acciones ---------- */
+  .ga-actions {{ display:flex; gap:.4rem; margin-top:.55rem; }}
   .ga-actions a {{
-      flex: 1; text-align: center; text-decoration: none;
-      font-size: .82rem; font-weight: 600;
-      padding: .42rem .5rem; border-radius: 9px;
-      border: 1px solid {COLORS['border']};
-      color: {COLORS['text']}; background: #FCFCFC;
+    flex:1; display:flex; align-items:center; justify-content:center; gap:.3rem;
+    min-height:38px; text-decoration:none; border-radius:var(--radius);
+    font-size:.79rem; font-weight:700; border:var(--border);
+    color:var(--ink); background:var(--canvas);
+    transition:border-color .15s, color .15s;
   }}
-  .ga-actions a:hover {{ border-color: {COLORS['accent']}; color: {COLORS['accent']}; }}
+  .ga-actions a:hover {{ border-color:var(--accent); color:var(--accent); }}
+  .ga-actions svg {{ width:13px; height:13px; }}
 
+  /* ---------- Pie ---------- */
   .ga-footer {{
-      margin-top: 2.2rem; padding-top: 1rem;
-      border-top: 1px solid {COLORS['border']};
-      color: {COLORS['muted']}; font-size: .78rem; line-height: 1.5;
+    margin-top:2rem; padding-top:.9rem; border-top:var(--border);
+    color:var(--ink-2); font-size:.75rem; line-height:1.55;
   }}
-  .ga-footer p {{ margin: 0 0 .35rem; }}
-  .ga-footer a {{ color: {COLORS['accent']}; text-decoration: none; }}
-  .ga-disclaimer {{ font-size: .72rem; opacity: .8; }}
+  .ga-footer p {{ margin:0 0 .3rem; }}
+  .ga-footer a {{ color:var(--accent); text-decoration:none; font-weight:600; }}
+  .ga-disclaimer {{ font-size:.7rem; opacity:.85; }}
 
-  /* Controles mas comodos en movil */
-  .stButton button {{
-      border-radius: 10px; font-weight: 600; font-size: .87rem;
-      border: 1px solid {COLORS['border']};
+  /* ---------- Controles nativos, mas tactiles ---------- */
+  .stButton button {{ font-weight:700; font-size:.85rem; min-height:42px; }}
+
+  /* Streamlit pinta el segmento activo con el acento al 10%: se lee lavado.
+     Aqui va solido, que es lo que hace obvio cual esta elegido en el movil. */
+  [data-testid="stButtonGroup"] button[data-variant="segmented_control"] {{
+    min-height:44px; font-weight:700; font-size:.87rem;
   }}
-  @media (max-width: 480px) {{
-      .block-container {{ padding: .9rem .7rem 2.5rem; }}
-      .ga-price {{ font-size: 1.22rem; }}
+  [data-testid="stButtonGroup"] button[data-selected="true"] {{
+    background:var(--accent) !important;
+    color:var(--on-accent) !important;
+    border-color:var(--accent) !important;
   }}
+  @media (max-width:480px) {{
+    .block-container {{ padding:.7rem .6rem 2.5rem; }}
+  }}
+  @media (prefers-reduced-motion:reduce) {{ * {{ transition:none !important; }} }}
 </style>
 """
+
+# --- Iconos: trazo grueso, remates rectos, sin curvas suaves ---------------
+ICON_LOGO = (
+    '<svg viewBox="0 0 64 64" fill="none" aria-hidden="true">'
+    '<rect width="64" height="64" fill="var(--accent)"/>'
+    '<path d="M32 5 52 33v12l-8 10H20l-8-10V33Z" fill="var(--on-accent)"/>'
+    '<rect x="19" y="41" width="26" height="6" fill="var(--accent)"/></svg>'
+)
+ICON_PIN = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" '
+    'stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">'
+    '<path d="M12 2 20 11v5l-4 6H8l-4-6v-5Z"/><path d="M9 12h6"/></svg>'
+)
+ICON_MAPS = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" '
+    'stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">'
+    '<path d="M3 6 9 3l6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/></svg>'
+)
+ICON_WAZE = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" '
+    'stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">'
+    '<path d="M3 12 21 4l-8 18-2-8Z"/></svg>'
+)
 
 
 def station_title(row: pd.Series) -> str:
@@ -135,7 +210,7 @@ def station_title(row: pd.Series) -> str:
     return row.get("razon_display") or "Grifo"
 
 
-def short_address(address: str, limit: int = 68) -> str:
+def short_address(address: str, limit: int = 62) -> str:
     """Direccion resumida: corta en el primer separador util."""
     text = (address or "").strip()
     for sep in (" ESQUINA", " ESQ.", ", ESQ", " (", " MZ", " URB."):
@@ -148,46 +223,75 @@ def short_address(address: str, limit: int = 68) -> str:
     return text
 
 
-def render_card(row: pd.Series, show_badge: bool = True) -> None:
-    """Tarjeta de un grifo: nombre, direccion, distancia y precio final."""
+def _actions(lat: float, lon: float) -> str:
+    return (
+        '<div class="ga-actions">'
+        f'<a href="{google_maps_url(lat, lon)}" target="_blank" rel="noopener">'
+        f'{ICON_MAPS}Google Maps</a>'
+        f'<a href="{waze_url(lat, lon)}" target="_blank" rel="noopener">'
+        f'{ICON_WAZE}Waze</a></div>'
+    )
+
+
+def render_hero(row: pd.Series, savings_text: str = "") -> None:
+    """Respuesta directa a la pregunta de la app: la mejor opcion cerca."""
     import streamlit as st
 
     name = html.escape(station_title(row))
     address = html.escape(short_address(row.get("direccion_display", "")))
     district = html.escape(str(row.get("distrito") or ""))
-    distance = float(row["distancia_km"])
-    price = float(row["precio_final"])
-    lat, lon = float(row["lat"]), float(row["lon"])
-
-    badge = ""
-    if show_badge and bool(row.get("tiene_descuento")):
-        badge = "<span class='ga-badge'>Con descuento</span>"
-
-    # La coordenada aproximada se avisa: viene del centroide del distrito.
-    approx = ""
-    if row.get("coord_source") != "exacta":
-        approx = "<span class='ga-approx'>ubicacion aprox.</span>"
-
-    location_line = f"{address}" + (f" · {district}" if district else "")
+    badge = (
+        '<span class="ga-badge">Con descuento</span>'
+        if bool(row.get("tiene_descuento")) else ""
+    )
+    approx = (
+        '<span class="ga-approx">Ubicación aproximada</span>'
+        if row.get("coord_source") != "exacta" else ""
+    )
+    save = f'<div class="ga-save">{html.escape(savings_text)}</div>' if savings_text else ""
 
     st.markdown(
-        f"""
-        <div class="ga-card">
-          <div class="ga-card-top">
-            <div>
-              <p class="ga-name">{name}</p>
-              <p class="ga-addr">{location_line}</p>
-              <div class="ga-meta">
-                <span class="ga-dist">{distance:.1f} km</span>{badge}{approx}
-              </div>
-            </div>
-            <div class="ga-price">S/ {price:.2f}<small>POR GALON</small></div>
-          </div>
-          <div class="ga-actions">
-            <a href="{google_maps_url(lat, lon)}" target="_blank" rel="noopener">Google Maps</a>
-            <a href="{waze_url(lat, lon)}" target="_blank" rel="noopener">Waze</a>
-          </div>
-        </div>
-        """,
+        f'<div class="ga-hero">'
+        f'<span class="ga-hero-tag">Mejor opción cerca de ti</span>'
+        f'<p class="ga-hero-name">{name}</p>'
+        f'<p class="ga-addr">{address}{" · " + district if district else ""}</p>'
+        f'<div class="ga-hero-price">S/ {float(row["precio_final"]):.2f}</div>'
+        f'<div class="ga-hero-unit">por galón</div>'
+        f'<div class="ga-meta"><span class="ga-chip">{float(row["distancia_km"]):.1f} km</span>'
+        f'{badge}{approx}</div>'
+        f'{_actions(float(row["lat"]), float(row["lon"]))}'
+        f'{save}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_card(row: pd.Series, rank: int, show_badge: bool = True) -> None:
+    """Tarjeta de un grifo. El numero es el mismo que lleva en el mapa."""
+    import streamlit as st
+
+    name = html.escape(station_title(row))
+    address = html.escape(short_address(row.get("direccion_display", "")))
+    district = html.escape(str(row.get("distrito") or ""))
+    badge = (
+        '<span class="ga-badge">Con descuento</span>'
+        if show_badge and bool(row.get("tiene_descuento")) else ""
+    )
+    approx = (
+        '<span class="ga-approx">Ubicación aprox.</span>'
+        if row.get("coord_source") != "exacta" else ""
+    )
+
+    st.markdown(
+        f'<div class="ga-card"><div class="ga-card-top">'
+        f'<span class="ga-rank">{rank}</span>'
+        f'<div class="ga-body">'
+        f'<p class="ga-name">{name}</p>'
+        f'<p class="ga-addr">{address}{" · " + district if district else ""}</p>'
+        f'<div class="ga-meta">'
+        f'<span class="ga-chip">{float(row["distancia_km"]):.1f} km</span>{badge}{approx}'
+        f'</div></div>'
+        f'<div class="ga-price"><b>S/ {float(row["precio_final"]):.2f}</b>'
+        f'<span>galón</span></div>'
+        f'</div>{_actions(float(row["lat"]), float(row["lon"]))}</div>',
         unsafe_allow_html=True,
     )

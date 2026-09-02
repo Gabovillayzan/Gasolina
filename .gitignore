@@ -18,3 +18,7 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Skills de terceros instaladas localmente (impeccable, apple-design).
+# Son herramientas de desarrollo con licencia propia, no codigo de la app.
+.claude/skills/

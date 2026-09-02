@@ -1,9 +1,27 @@
+# Tema "Ruta": ambar de senalizacion vial sobre gris asfalto.
+# Sin `base`, Streamlit sigue el tema del dispositivo y elige [theme] o [theme.dark].
+
 [theme]
-base = "light"
-primaryColor = "#10B981"
-backgroundColor = "#FAFAFA"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+baseFontSize = 16
+baseRadius = "small"
+buttonRadius = "small"
+
+backgroundColor = "#F6F7F8"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#111111"
+textColor = "#14181B"
+primaryColor = "#B4690E"
+borderColor = "#D7DEE2"
+linkColor = "#B4690E"
+
+[theme.dark]
+backgroundColor = "#0F1416"
+secondaryBackgroundColor = "#182024"
+textColor = "#E9EFF2"
+primaryColor = "#F2A93B"
+borderColor = "#2C383E"
+linkColor = "#F2A93B"
 
 [client]
 toolbarMode = "minimal"

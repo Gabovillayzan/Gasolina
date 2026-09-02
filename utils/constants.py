@@ -63,19 +63,57 @@ FUZZY_MIN_SCORE = 75              # piso de similitud de direccion (0-100)
 # --- Ubicacion demo (fallback inicial) ---
 DEFAULT_LOCATION = {"lat": -12.1400, "lon": -77.0200, "label": "Barranco, Lima"}
 
+# --- Mapa ---
+MAP_MAX_PINS = 8
+# Las estaciones sin coordenada exacta comparten el centroide de su distrito.
+# Se abren en abanico para poder distinguirlas. 0.0013 grados son unos 145 m:
+# a zoom 12 ya se separan en pantalla, y sigue muy por debajo del error que ya
+# arrastra un centroide distrital (un distrito de Lima mide kilometros).
+MAP_JITTER_DEG = 0.0013
+
 # --- Cache ---
 CACHE_TTL_SECONDS = 86400  # 1 dia
 
-# --- UI ---
-COLORS = {
-    "bg": "#FAFAFA",
-    "text": "#111111",
-    "accent": "#10B981",
-    "muted": "#6B7280",
-    "card": "#FFFFFF",
-    "border": "#ECECEC",
+# --- UI: tema "Ruta" -------------------------------------------------------
+# Roles de color, no una bolsa de tonos. El modo oscuro esta disenado aparte:
+# no es el claro invertido (las superficies suben de luminosidad, el ambar baja
+# de saturacion para no vibrar sobre fondo oscuro).
+THEME = {
+    "light": {
+        "canvas": "#F6F7F8",
+        "surface": "#FFFFFF",
+        "ink": "#14181B",
+        "ink_2": "#59656C",
+        "line": "#D7DEE2",
+        "accent": "#B4690E",
+        "on_accent": "#FFFFFF",
+        "ok": "#0F7A52",
+        "ok_bg": "rgba(15,122,82,.10)",
+        "chip": "#EEF1F3",
+        "chip_ink": "#3A464C",
+    },
+    "dark": {
+        "canvas": "#0F1416",
+        "surface": "#182024",
+        "ink": "#E9EFF2",
+        "ink_2": "#9DACB3",
+        "line": "#2C383E",
+        "accent": "#F2A93B",
+        "on_accent": "#1A1206",
+        "ok": "#4ECBA0",
+        "ok_bg": "rgba(78,203,160,.13)",
+        "chip": "#222C31",
+        "chip_ink": "#BFCBD1",
+    },
 }
+
 APP_NAME = "GasolinApp"
+APP_ICON = ROOT / "assets" / "icon.png"
+FONT_FAMILY = "Inter"
+FONT_CSS_URL = (
+    "https://fonts.googleapis.com/css2"
+    "?family=Inter:wght@400;500;600;700;800&display=swap"
+)
 
 # --- Branding (editable) ---
 AUTHOR_NAME = "Gabriel Villayzan"

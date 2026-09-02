@@ -22,12 +22,15 @@ No hace falta configurar secrets: la app no usa credenciales.
 - [ ] `pip install -r requirements.txt && streamlit run app.py` corre limpio en local.
 - [ ] Los tres archivos de `data/` están commiteados: los dos Excel de descuentos, `peru_districts.csv` y `evpc_seed.xlsx`.
 - [ ] El pie de la app muestra la fecha de carga de Osinergmin y no el aviso de datos desactualizados.
-- [ ] Probar en el celular: permitir ubicación, y también negarla para confirmar que la búsqueda manual funciona.
+- [ ] Probar en el celular: el permiso de ubicación debe salir al abrir la app. Negarlo también, para confirmar que la búsqueda manual funciona.
+- [ ] Ver la app en claro y en oscuro cambiando el tema del sistema y recargando.
+- [ ] Abrir el mapa: punto azul en tu posición y números que coincidan con las tarjetas.
 - [ ] Marcar y desmarcar los dos descuentos: con alguno activo salen dos bloques, sin ninguno salen 6 grifos.
 
 ## Notas de operación
 
-- **La geolocalización exige HTTPS.** Streamlit Cloud ya lo sirve; en local funciona solo en `localhost`.
+- **La geolocalización exige HTTPS.** Streamlit Cloud ya lo sirve; en local funciona solo en `localhost`. Se pide con `enableHighAccuracy`, así que en móvil usa GPS real y puede tardar unos segundos la primera vez.
+- **El tema sigue al dispositivo.** No añadas `base` en `[theme]` del `config.toml`: eso fuerza un modo y anula el oscuro.
 - **Osinergmin responde 403 sin `User-Agent` de navegador.** Ya va en `HTTP_HEADERS` (`utils/constants.py`); si algún día falla la descarga, revisa eso primero.
 - **La URL del EVPC lleva el año en la ruta.** `EVPC_URL_FALLBACKS` prueba el año actual y el anterior. Si Osinergmin cambia el patrón, actualiza `EVPC_URL`.
 - **Reinicio de la app = caché vacía.** Streamlit Cloud borra el disco al reiniciar; el primer usuario paga la reconstrucción (~10 s) y `evpc_seed.xlsx` cubre el caso de que la descarga falle en ese momento.

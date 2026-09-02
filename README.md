@@ -5,13 +5,15 @@ Combina precio final, distancia y descuentos de marca sobre los precios oficiale
 
 ## Qué hace
 
-- Ubicación real por GPS del navegador, con búsqueda manual por distrito como alternativa.
+- Pide el GPS **al abrir la app**, con alta precisión; búsqueda manual por distrito como alternativa.
 - Combustible **Regular** o **Premium** (Premium por defecto).
 - Radio de 5 / 10 / 20 km con distancia Haversine.
 - Descuentos opcionales de Repsol (S/ 2.5) y Primax (S/ 1.0) sobre el precio por galón.
 - Ranking de conveniencia que mezcla precio final, cercanía y descuento.
-- Ahorro estimado por tanque lleno (14 gal) frente al promedio de tu distrito.
+- **Mejor opción cerca de ti** destacada arriba, con el ahorro por tanque lleno (14 gal).
+- Mapa con tu posición y los grifos numerados igual que las tarjetas.
 - Enlaces directos a Google Maps y Waze.
+- **Tema claro y oscuro** que sigue al dispositivo.
 
 ## Fuentes
 
@@ -37,6 +39,32 @@ La primera ejecución descarga y procesa el Excel de Osinergmin (~10 s). Las sig
 ## Desplegar
 
 Ver [DEPLOY.md](DEPLOY.md).
+
+## Tema e interfaz
+
+Tema **Ruta**: ámbar de señalización vial sobre gris asfalto, con lenguaje algo
+brutalista — aristas de 3 px, bordes de 2 px, sombra sólida sin difuminar y
+numeración en bloque. Tipografía Inter.
+
+El color se define como **roles** (fondo, superficie, texto, acción, estado) en
+`THEME` de `utils/constants.py`, y los mismos valores viven en `[theme]` y
+`[theme.dark]` del `config.toml` para que los widgets nativos concuerden. El
+modo oscuro está diseñado aparte, no es el claro invertido.
+
+`config.toml` **no** fija `base`: así Streamlit sigue el tema del dispositivo.
+El CSS cambia con `prefers-color-scheme`, sin coste de rerun. El basemap del
+mapa se elige al cargar según `st.context.theme`; si cambias el tema del sistema
+a mitad de sesión, la interfaz se adapta al instante pero el mapa mantiene su
+estilo hasta que recargues.
+
+## Rendimiento
+
+- La ubicación se pide en el primer render, en paralelo con la carga de datos.
+  Antes iba detrás de un botón y encadenaba un rerun antes de siquiera preguntar.
+- Filtros, resultados y mapa viven en un `@st.fragment`: tocar un filtro no
+  reejecuta la carga del dataset ni vuelve a resolver la ubicación.
+- `compute_results` cachea el ranking por combinación de filtros.
+- Medido en local: dataset desde parquet **92 ms**, ranking **6 ms**.
 
 ## Decisiones importantes
 
@@ -77,6 +105,22 @@ Las fuentes traen mojibake real (UTF-8 y latin-1 leídos como CP932): `AV. JESUS
 
 Cada campo se guarda dos veces: `*_display` (legible, con tildes, para la UI) y `*_norm` (mayúsculas sin tildes ni puntuación, para joins). Los alias de división política se resuelven ahí mismo (`PROV. CONST. DEL CALLAO` → `CALLAO`).
 
+### Mapa
+
+`st.map` no admite marcadores distintos ni etiquetas, así que el mapa usa
+`st.pydeck_chart` (pydeck ya viene con Streamlit, sin dependencia nueva): tu
+posición como punto azul con halo, y los grifos como puntos ámbar numerados.
+
+Las estaciones sin coordenada exacta comparten el centroide de su distrito, así
+que se abren en abanico determinista de ~145 m (`MAP_JITTER_DEG`) para poder
+distinguirlas. Es holgadamente menor que el error que ya arrastra un centroide
+distrital, donde un distrito de Lima mide kilómetros.
+
+Detalle de pydeck: convierte los valores de texto de una capa en accesores de
+datos (`"@@=Inter, sans-serif"`), lo que rompe silenciosamente `TextLayer`. Por
+eso esa capa solo recibe constantes no textuales, y los literales van con doble
+comilla.
+
 ### Coordenadas
 
 **El maestro EVPC no trae coordenadas.** Sin ellas no hay distancia, así que cada estación recibe el centroide de su distrito (cobertura 100% con respaldo distrito → departamento+distrito → provincia). Cuando el match con una lista de beneficios aporta lat/lon real, esa reemplaza al centroide: hoy 196 estaciones tienen ubicación exacta y el resto se muestra con la etiqueta *ubicación aprox.*
@@ -90,3 +134,5 @@ Por lo mismo las coordenadas **no** se usan como llave de cruce: al ser centroid
 - Los montos de descuento son fijos (`DISCOUNTS` en `utils/constants.py`) y no reflejan condiciones por tarjeta, día o tope de galones.
 - Los precios son los que cada grifo reporta a Osinergmin; pueden estar desactualizados respecto al surtidor.
 - La distancia es en línea recta, no por ruta de manejo.
+- En el mapa, las estaciones de un mismo distrito sin coordenada exacta aparecen
+  repartidas en abanico alrededor del centro del distrito, no en su dirección real.

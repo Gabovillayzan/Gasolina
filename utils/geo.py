@@ -93,27 +93,48 @@ def search_locations(query: str, centroids: pd.DataFrame, limit: int = 8) -> pd.
     return hits[["label", "lat", "lon", "dep_norm", "prov_norm", "dist_norm"]]
 
 
-def get_browser_location() -> dict | None:
-    """Pide la ubicacion real via navigator.geolocation del navegador.
+# JS propio: el helper de la libreria llama a getCurrentPosition() SIN opciones,
+# asi que enableHighAccuracy queda en false y devuelve posicion por WiFi/antena.
+# Con estas opciones se pide GPS real. El componente resuelve promesas.
+_GEO_JS = """new Promise((res) => {
+  if (!navigator.geolocation) { res({error: 'unsupported'}); return; }
+  navigator.geolocation.getCurrentPosition(
+    (p) => res({lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy}),
+    (e) => res({error: e.code === 1 ? 'denied' : 'unavailable'}),
+    {enableHighAccuracy: true, timeout: 8000, maximumAge: 60000}
+  );
+})"""
 
-    Nunca usa IP del servidor. Devuelve None si el usuario no da permiso,
-    la libreria no esta disponible o el navegador aun no responde.
+
+def request_browser_location(attempt: int = 0) -> dict | None:
+    """Pide la ubicacion real al navegador y devuelve el resultado crudo.
+
+    Se monta en el primer render, no detras de un boton: asi el permiso aparece
+    mientras los datos cargan, en vez de encadenar un rerun antes de preguntar.
+    Nunca usa la IP del servidor.
+
+    Devuelve None mientras el navegador aun no responde, o un dict con lat/lon
+    o con `error` en ('denied', 'unavailable', 'unsupported').
     """
     try:
-        from streamlit_js_eval import get_geolocation
+        from streamlit_js_eval import streamlit_js_eval
     except ImportError:
-        return None
+        return {"error": "unsupported"}
     try:
-        pos = get_geolocation()
+        result = streamlit_js_eval(js_expressions=_GEO_JS, key=f"geo_{attempt}")
     except Exception:
+        return {"error": "unavailable"}
+    if not isinstance(result, dict):
         return None
-    if not pos or "coords" not in pos:
+    if "error" in result:
+        return result
+    if result.get("lat") is None or result.get("lon") is None:
         return None
-    coords = pos["coords"]
-    lat, lon = coords.get("latitude"), coords.get("longitude")
-    if lat is None or lon is None:
-        return None
-    return {"lat": float(lat), "lon": float(lon), "accuracy": coords.get("accuracy")}
+    return {
+        "lat": float(result["lat"]),
+        "lon": float(result["lon"]),
+        "accuracy": result.get("acc"),
+    }
 
 
 def resolve_admin_from_point(lat: float, lon: float, centroids: pd.DataFrame) -> dict:
