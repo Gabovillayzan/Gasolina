@@ -1,0 +1,8 @@
+streamlit>=1.40,<2
+pandas>=2.2
+numpy>=1.26
+requests>=2.32
+openpyxl>=3.1
+pyarrow>=16
+rapidfuzz>=3.9
+streamlit-js-eval>=0.1.7

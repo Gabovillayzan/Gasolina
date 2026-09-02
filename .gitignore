@@ -1,26 +1,20 @@
-# Dependencias
-node_modules/
+# Cache generada en runtime (se reconstruye sola cada dia)
+data/cache/*
+!data/cache/.gitkeep
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
+.pytest_cache/
 
-# Entorno
+# Streamlit / entorno
+.streamlit/secrets.toml
 .env
-.env.local
-*.local
-
-# Build
-dist/
-build/
-out/
 
 # Editor / SO
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
