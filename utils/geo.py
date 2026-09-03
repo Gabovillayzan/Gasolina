@@ -76,32 +76,23 @@ def attach_centroids(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def search_locations(query: str, centroids: pd.DataFrame, limit: int = 8) -> pd.DataFrame:
-    """Busqueda manual de ubicacion por distrito/provincia (fallback sin GPS)."""
-    q = norm_key(query)
-    if len(q) < 3:
-        return centroids.head(0)
-    mask = (
-        centroids["dist_norm"].str.contains(q, regex=False)
-        | centroids["prov_norm"].str.contains(q, regex=False)
-    )
-    hits = centroids[mask].copy()
-    # Coincidencia exacta de distrito primero, luego alfabetico.
-    hits["_rank"] = np.where(hits["dist_norm"] == q, 0, 1)
-    hits = hits.sort_values(["_rank", "distrito"]).head(limit)
-    hits["label"] = hits["distrito"] + ", " + hits["provincia"] + " - " + hits["departamento"]
-    return hits[["label", "lat", "lon", "dep_norm", "prov_norm", "dist_norm"]]
-
-
 # JS propio: el helper de la libreria llama a getCurrentPosition() SIN opciones,
 # asi que enableHighAccuracy queda en false y devuelve posicion por WiFi/antena.
 # Con estas opciones se pide GPS real. El componente resuelve promesas.
-_GEO_JS = """new Promise((res) => {
+_GEO_JS = """new Promise(async (res) => {
   if (!navigator.geolocation) { res({error: 'unsupported'}); return; }
+  let perm = 'unknown';
+  try {
+    if (navigator.permissions) {
+      perm = (await navigator.permissions.query({name: 'geolocation'})).state;
+    }
+  } catch (e) {}
   navigator.geolocation.getCurrentPosition(
-    (p) => res({lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy}),
-    (e) => res({error: e.code === 1 ? 'denied' : 'unavailable'}),
-    {enableHighAccuracy: true, timeout: 8000, maximumAge: 60000}
+    (p) => res({lat: p.coords.latitude, lon: p.coords.longitude,
+                acc: p.coords.accuracy, perm: perm}),
+    (e) => res({error: e.code === 1 ? 'denied'
+                     : e.code === 3 ? 'timeout' : 'unavailable', perm: perm}),
+    {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000}
   );
 })"""
 
@@ -114,7 +105,12 @@ def request_browser_location(attempt: int = 0) -> dict | None:
     Nunca usa la IP del servidor.
 
     Devuelve None mientras el navegador aun no responde, o un dict con lat/lon
-    o con `error` en ('denied', 'unavailable', 'unsupported').
+    o con `error` en ('denied', 'unavailable', 'timeout', 'unsupported').
+
+    Tambien devuelve `perm`, el estado del permiso del navegador. Sirve para
+    separar dos fallos que se sienten iguales pero se arreglan distinto: el
+    permiso denegado en el navegador, y el permiso concedido pero con la
+    ubicacion del telefono apagada.
     """
     try:
         from streamlit_js_eval import streamlit_js_eval
@@ -127,13 +123,14 @@ def request_browser_location(attempt: int = 0) -> dict | None:
     if not isinstance(result, dict):
         return None
     if "error" in result:
-        return result
+        return {"error": result["error"], "perm": result.get("perm", "unknown")}
     if result.get("lat") is None or result.get("lon") is None:
         return None
     return {
         "lat": float(result["lat"]),
         "lon": float(result["lon"]),
         "accuracy": result.get("acc"),
+        "perm": result.get("perm", "unknown"),
     }
 
 

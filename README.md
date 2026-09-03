@@ -5,7 +5,9 @@ Combina precio final, distancia y descuentos de marca sobre los precios oficiale
 
 ## Qué hace
 
-- Pide el GPS **al abrir la app**, con alta precisión; búsqueda manual por distrito como alternativa.
+- Pide el GPS **al abrir la app**, con alta precisión, y muestra **tu dirección real**.
+- Una sola caja arriba hace de indicador y de buscador: escribe encima para cambiar de sitio,
+  incluso un cruce como *"Larco con Benavides"*.
 - Combustible **Regular** o **Premium** (Premium por defecto).
 - Radio de 5 / 10 / 20 km con distancia Haversine.
 - Descuentos opcionales de Repsol (S/ 2.5) y Primax (S/ 1.0) sobre el precio por galón.
@@ -23,6 +25,7 @@ Combina precio final, distancia y descuentos de marca sobre los precios oficiale
 | `data/repsol_con_descuento_final.xlsx` | Estaciones Repsol con descuento |
 | `data/primax_con_descuento_completado.xlsx` | Estaciones Primax/Coesti con descuento |
 | `data/peru_districts.csv` | Centroides de los 1.874 distritos del Perú ([ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado)) |
+| [Photon](https://photon.komoot.io) (OpenStreetMap) | Buscar direcciones y nombrar tu ubicación |
 
 ## Correr en local
 
@@ -65,6 +68,10 @@ estilo hasta que recargues.
   reejecuta la carga del dataset ni vuelve a resolver la ubicación.
 - `compute_results` cachea el ranking por combinación de filtros.
 - Medido en local: dataset desde parquet **92 ms**, ranking **6 ms**.
+- Dos elementos invisibles abrían ~58 px muertos arriba: el bloque que solo
+  contiene el `<style>` inyectado y el iframe del geolocalizador, cada uno con
+  su gap de 16 px. El primero va en `display:none`; el segundo sale del flujo
+  con `position:absolute` porque tiene que seguir ejecutándose para leer el GPS.
 
 ## Decisiones importantes
 
@@ -104,6 +111,30 @@ Todo lo que quede bajo `MATCH_MIN_CONFIDENCE` (0.70) **no recibe descuento**. Re
 Las fuentes traen mojibake real (UTF-8 y latin-1 leídos como CP932): `AV. JESUS Nﾂｺ 2307`, `IBAﾑEZ`, `BREﾑA`. `utils/cleaners.py` lo repara en dos pasadas — roundtrip completo UTF-8 y, si falla, reconstrucción byte a byte — y **solo toca cadenas con síntomas**, para no dañar texto ya correcto. Es idempotente. `ftfy` se descartó: empeora este caso concreto.
 
 Cada campo se guarda dos veces: `*_display` (legible, con tildes, para la UI) y `*_norm` (mayúsculas sin tildes ni puntuación, para joins). Los alias de división política se resuelven ahí mismo (`PROV. CONST. DEL CALLAO` → `CALLAO`).
+
+### Ubicación
+
+Una sola caja arriba: su placeholder lleva la dirección ya resuelta, así que
+indica dónde estás y acepta otra dirección sin salir de ahí. Antes había que
+bajar hasta el pie de la página para cambiarla.
+
+El geocoder es **Photon**, no Nominatim: resuelve cómo habla la gente aquí.
+*"Larco con Benavides"* cae en la esquina correcta de Miraflores, algo que
+Nominatim devuelve vacío. Se usa en los dos sentidos — texto a punto para
+buscar, punto a texto para nombrar tu ubicación.
+
+Es un servicio público y gratuito, así que se le pide poco: la búsqueda se
+cachea 1 h por consulta y el reverse 24 h por coordenada redondeada a 4
+decimales (~11 m, de sobra para nombrar la calle y suficiente para que el caché
+sirva a toda la cuadra). **Si Photon falla o tarda, la app sigue igual**: la
+caja muestra "Tu ubicación actual" y todo lo demás funciona. La
+geocodificación es una comodidad, nunca un requisito.
+
+Cuando el GPS falla, el aviso distingue qué hay que arreglar consultando la
+Permissions API: permiso denegado en el navegador, o permiso concedido con la
+ubicación del teléfono apagada. Son dos fallos que se ven iguales y se
+resuelven distinto. Una página web no puede abrir los ajustes del sistema ni
+forzar el prompt, así que lo único útil es decir exactamente qué revisar.
 
 ### Mapa
 

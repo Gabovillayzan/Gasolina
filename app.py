@@ -31,8 +31,8 @@ from utils.geo import (
     load_district_centroids,
     request_browser_location,
     resolve_admin_from_point,
-    search_locations,
 )
+from utils.geocode import reverse_place, search_places
 from utils.mapview import build_deck
 from utils.ranking import rank_stations, split_results
 from utils.savings import compute_savings
@@ -60,6 +60,17 @@ def load_centroids():
     return load_district_centroids()
 
 
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def cached_reverse(lat: float, lon: float) -> str:
+    """Direccion de un punto, cacheada. El llamador redondea las coordenadas."""
+    return reverse_place(lat, lon)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_search(query: str, near_lat: float, near_lon: float):
+    return search_places(query, near=(near_lat, near_lon))
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def compute_results(dataset, fuel, lat, lon, radius, brands):
     """Ranking cacheado por combinacion de filtros: no recalcula al repintar."""
@@ -76,8 +87,9 @@ def init_state() -> None:
         "use_primax": False,
         "location": None,   # dict lat/lon/label, o None mientras no haya
         "geo_attempt": 0,   # sube al reintentar; fuerza un componente nuevo
-        "geo_status": "",   # denied | unavailable | unsupported
-        "manual_query": "",
+        "geo_status": "",   # denied | unavailable | timeout | unsupported
+        "geo_perm": "",     # estado del permiso segun el navegador
+        "place_query": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -121,64 +133,158 @@ def resolve_location() -> None:
     result = request_browser_location(st.session_state["geo_attempt"])
     if result is None:
         return  # el navegador aun no responde
+
+    st.session_state["geo_perm"] = result.get("perm", "")
     if "error" in result:
         st.session_state["geo_status"] = result["error"]
         return
+
+    lat, lon = result["lat"], result["lon"]
+    # Redondear antes de geocodificar: 4 decimales son ~11 m, de sobra para
+    # nombrar la calle, y hace que el cache sirva a toda la cuadra.
+    address = cached_reverse(round(lat, 4), round(lon, 4))
     st.session_state["location"] = {
-        "lat": result["lat"], "lon": result["lon"], "label": "Tu ubicación actual",
+        "lat": lat, "lon": lon,
+        "label": address or "Tu ubicación actual",
+        "from_gps": True,
     }
     st.session_state["geo_status"] = ""
 
 
-def render_location_bar() -> None:
-    location = current_location()
-    is_default = location.get("is_default", False)
-    label = location.get("label") or f"{location['lat']:.4f}, {location['lon']:.4f}"
-    state = "ga-loc-default" if is_default else ""
+def _retry_gps() -> None:
+    """Callback: vuelve a pedir el GPS desde cero.
+
+    Va como `on_click` y no en linea porque los callbacks corren antes del
+    siguiente run, que es el unico momento en que Streamlit permite limpiar la
+    clave de un widget ya instanciado (aqui, la caja de busqueda).
+    """
+    st.session_state["geo_attempt"] += 1
+    st.session_state["geo_status"] = ""
+    st.session_state["location"] = None
+    st.session_state["place_query"] = ""
+
+
+def _pick_place(place) -> None:
+    """Callback: fija la ubicacion elegida y vacia la busqueda."""
+    st.session_state["location"] = {
+        "lat": place.lat, "lon": place.lon,
+        "label": place.label, "from_gps": False,
+    }
+    st.session_state["geo_status"] = ""
+    st.session_state["place_query"] = ""
+
+
+def render_gps_alert() -> None:
+    """Aviso accionable cuando no se pudo leer el GPS.
+
+    Una pagina web no puede abrir los ajustes del sistema ni forzar el prompt,
+    asi que lo unico util es decir exactamente que revisar. `geo_perm` separa
+    dos fallos que se ven iguales: permiso denegado en el navegador, o permiso
+    concedido con la ubicacion del telefono apagada.
+    """
+    status = st.session_state["geo_status"]
+    if not status:
+        return
+
+    granted = st.session_state.get("geo_perm") == "granted"
+    if status == "denied":
+        title = "Bloqueaste la ubicación"
+        body = ("Toca el candado de la barra de direcciones, permite Ubicación "
+                "y reintenta. O escribe tu dirección arriba.")
+    elif status == "unavailable" and granted:
+        title = "El GPS del teléfono está apagado"
+        body = ("Diste el permiso, pero el sistema no entrega posición. Activa "
+                "Ubicación en los ajustes del teléfono y reintenta. Mientras "
+                "tanto puedes escribir tu dirección arriba.")
+    elif status == "unavailable":
+        title = "No pudimos leer tu ubicación"
+        body = ("Revisa que la Ubicación del teléfono esté encendida y que el "
+                "navegador tenga permiso. O escribe tu dirección arriba.")
+    elif status == "timeout":
+        title = "El GPS está tardando"
+        body = ("Suele pasar bajo techo. Reintenta al aire libre, o escribe tu "
+                "dirección arriba.")
+    else:
+        title = "Tu navegador no comparte ubicación"
+        body = "Escribe tu dirección arriba para ver los grifos cerca."
+
     st.markdown(
-        f'<div class="ga-loc {state}">{ICON_PIN}<span>{label}</span></div>',
+        f'<div class="ga-alert"><b>{title}</b><span>{body}</span></div>',
         unsafe_allow_html=True,
     )
-
-    status = st.session_state["geo_status"]
-    if status == "denied":
-        st.caption("Bloqueaste la ubicación. Elige tu zona abajo, o actívala y reintenta.")
-    elif status == "unavailable":
-        st.caption("No pudimos leer el GPS. Reintenta o elige tu zona abajo.")
-    elif is_default and not status:
-        st.caption("Buscando tu ubicación…")
+    if status != "unsupported":
+        st.button("Reintentar ubicación", use_container_width=True,
+                  on_click=_retry_gps)
 
 
-def render_location_controls() -> None:
-    """Reintento de GPS y busqueda manual, fuera del camino principal."""
-    if st.button("Actualizar ubicación", use_container_width=True):
-        st.session_state["geo_attempt"] += 1
-        st.session_state["geo_status"] = ""
-        st.session_state["location"] = None
-        st.rerun()
+def render_suggestions(query: str, location: dict) -> None:
+    """Resultados de la busqueda de direcciones: un toque y listo."""
+    places = cached_search(query.strip(), location["lat"], location["lon"])
+    if not places:
+        st.markdown(
+            '<div class="ga-locnote">Sin resultados. Prueba con una avenida y '
+            'su distrito, o un cruce como “Larco con Benavides”.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.markdown('<div class="ga-sugg">', unsafe_allow_html=True)
+    for index, place in enumerate(places):
+        st.button(
+            place.label, key=f"place_{index}", use_container_width=True,
+            on_click=_pick_place, args=(place,),
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_location_note(location: dict, is_default: bool) -> None:
+    """Linea de contexto bajo la caja, y la salida de vuelta al GPS."""
+    if is_default:
+        if not st.session_state["geo_status"]:
+            st.markdown(
+                f'<div class="ga-locnote">{ICON_PIN}Buscando tu ubicación…</div>',
+                unsafe_allow_html=True,
+            )
+        return
+
+    if location.get("from_gps"):
+        st.markdown(
+            f'<div class="ga-locnote">{ICON_PIN}Tu ubicación actual · '
+            'escribe arriba para cambiarla</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # Ubicacion puesta a mano: la vuelta al GPS solo aparece cuando tiene sentido.
+    st.markdown(
+        f'<div class="ga-locnote">{ICON_PIN}Ubicación elegida por ti</div>',
+        unsafe_allow_html=True,
+    )
+    st.button("Usar mi ubicación actual", use_container_width=True,
+              on_click=_retry_gps)
+
+
+def render_location_box() -> None:
+    """Una sola caja arriba: muestra donde estas y acepta otra direccion.
+
+    El placeholder lleva la direccion ya resuelta, asi que la misma caja hace
+    de indicador y de buscador. Antes habia que bajar al pie para cambiarla.
+    """
+    location = current_location()
+    is_default = location.get("is_default", False)
+    placeholder = location["label"] if not is_default else "Escribe tu dirección o zona"
 
     query = st.text_input(
-        "Buscar zona",
-        key="manual_query",
-        placeholder="Miraflores, Trujillo, Surco…",
-        label_visibility="collapsed",
+        "Ubicación", key="place_query",
+        placeholder=placeholder, label_visibility="collapsed",
     )
-    if not query or len(query.strip()) < 3:
+
+    if query and len(query.strip()) >= 3:
+        render_suggestions(query, location)
         return
 
-    hits = search_locations(query, load_centroids())
-    if hits.empty:
-        st.caption("Sin coincidencias. Prueba con el nombre del distrito.")
-        return
-
-    choice = st.selectbox("Elige tu zona", hits["label"].tolist(), label_visibility="collapsed")
-    if st.button("Usar esta zona", use_container_width=True):
-        row = hits[hits["label"] == choice].iloc[0]
-        st.session_state["location"] = {
-            "lat": float(row["lat"]), "lon": float(row["lon"]), "label": choice.title(),
-        }
-        st.session_state["geo_status"] = ""
-        st.rerun()
+    render_location_note(location, is_default)
+    render_gps_alert()
 
 
 # --------------------------------------------------------------------------
@@ -299,6 +405,8 @@ def render_footer(meta) -> None:
         f'<div class="ga-footer">'
         f'<p>Datos de <a href="{EVPC_SOURCE_PAGE}" target="_blank">Osinergmin (EVPC)</a> '
         f'del <strong>{stamp}</strong> · {meta.stations:,} grifos.</p>'
+        f'<p>Las estaciones sin coordenada exacta se ubican en el centro de su '
+        f'distrito y aparecen marcadas como aproximadas.</p>'
         f'<p>{ABOUT_TEXT}</p>'
         f'<p>Hecho por <a href="{AUTHOR_LINKEDIN}" target="_blank">{AUTHOR_NAME}</a></p>'
         f'<p class="ga-disclaimer">Precios referenciales reportados por cada grifo. '
@@ -332,19 +440,11 @@ def main() -> None:
             "Ves la última información disponible."
         )
 
-    render_location_bar()
+    render_location_box()
     location = current_location()
     admin = resolve_admin_from_point(location["lat"], location["lon"], load_centroids())
 
     results_fragment(dataset, location, admin)
-
-    with st.expander("Cambiar ubicación"):
-        render_location_controls()
-        st.caption(
-            "Las estaciones sin coordenada exacta se ubican en el centro de su "
-            "distrito y aparecen marcadas como aproximadas."
-        )
-
     render_footer(meta)
 
 

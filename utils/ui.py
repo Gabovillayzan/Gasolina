@@ -37,9 +37,21 @@ CSS = f"""
   }}
 
   /* Quitar cromo de Streamlit */
-  #MainMenu, footer, header {{ visibility: hidden; }}
-  .stDeployButton {{ display: none; }}
-  .stAppHeader {{ display: none; }}
+  #MainMenu, footer, header {{ display: none; }}
+  .stDeployButton, .stAppHeader {{ display: none; }}
+
+  /* Dos elementos invisibles abrian ~58 px muertos arriba: el bloque que solo
+     contiene este <style>, y el iframe del componente de geolocalizacion.
+     Cada uno sumaba ademas un gap de 16 px del bloque vertical. */
+  [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style) {{
+    display: none;
+  }}
+  /* El iframe se saca del flujo en vez de ocultarlo: tiene que seguir
+     ejecutandose para poder leer el GPS. */
+  [data-testid="stElementContainer"]:has(iframe[title^="streamlit_js_eval"]) {{
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; opacity: 0; pointer-events: none;
+  }}
 
   .stApp {{ background: var(--canvas); }}
   .block-container {{ padding: .8rem .85rem 3rem; max-width: 660px; }}
@@ -59,14 +71,37 @@ CSS = f"""
   }}
 
   /* ---------- Ubicacion ---------- */
-  .ga-loc {{
-    display:flex; align-items:center; gap:.45rem;
-    font-size:.85rem; padding:.5rem .65rem; margin-bottom:.55rem;
-    border-radius:var(--radius); border:var(--border); background:var(--surface);
+  /* La caja de busqueda ES el indicador de ubicacion: su placeholder muestra
+     donde estas, y escribir encima la cambia. Un solo control, arriba. */
+  [data-testid="stTextInput"] input {{
+    min-height:44px; font-weight:600; font-size:.88rem;
+    border-radius:var(--radius) !important;
   }}
-  .ga-loc svg {{ width:15px; height:15px; flex:none; color:var(--accent); }}
-  .ga-loc span {{ font-weight:600; }}
-  .ga-loc-default span {{ font-weight:500; color:var(--ink-2); }}
+  [data-testid="stTextInput"] input::placeholder {{
+    color:var(--ink); opacity:.72; font-weight:600;
+  }}
+  .ga-locnote {{
+    display:flex; align-items:center; gap:.35rem;
+    font-size:.75rem; color:var(--ink-2); margin:-.15rem 0 .5rem .1rem;
+  }}
+  .ga-locnote svg {{ width:12px; height:12px; flex:none; color:var(--accent); }}
+
+  /* Sugerencias de direccion: full width, un toque */
+  .ga-sugg {{ margin-bottom:.5rem; }}
+  .ga-sugg .stButton button {{
+    justify-content:flex-start; text-align:left; font-weight:600;
+    font-size:.83rem; min-height:42px;
+  }}
+
+  /* Aviso accionable (GPS apagado, permiso denegado) */
+  .ga-alert {{
+    border:var(--border); border-left:3px solid var(--accent);
+    background:var(--surface); border-radius:var(--radius);
+    padding:.6rem .7rem; margin-bottom:.5rem; font-size:.81rem;
+    color:var(--ink); line-height:1.45;
+  }}
+  .ga-alert b {{ display:block; margin-bottom:.15rem; font-weight:800; }}
+  .ga-alert span {{ color:var(--ink-2); }}
 
   /* ---------- Titulos de bloque ---------- */
   .ga-h3 {{
