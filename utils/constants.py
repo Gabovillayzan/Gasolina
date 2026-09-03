@@ -120,5 +120,5 @@ AUTHOR_NAME = "Gabriel Villayzan"
 AUTHOR_LINKEDIN = "https://www.linkedin.com/in/gvillayzan/"
 ABOUT_TEXT = (
     "Parte de mis apps personales 🧪 — ejercicios que hago divirtiendome con IA. "
-    "Construida con Gemini Spark ✨, Claude Code 🤖 y varios modelos en modo detallado."
+    "Construida usando Gemini Spark ✨, Claude Code 🤖 y otros."
 )
